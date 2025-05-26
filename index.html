@@ -1,26 +1,35 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Simulação PWM Senoidal x Triangular</title>
+    <title>Inversor PWM - Modos Separados e Juntos</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+      .plots-vertical {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        max-width: 800px;
+        margin: auto;
+      }
+      .plotbox {
+        min-height: 240px;
+      }
+      #plot-tudo {
+        margin-top: 32px;
+      }
+    </style>
   </head>
   <body>
-    <div>
+    <div style="max-width: 800px; margin: 24px auto">
       <label
         >Frequência da Senoide:
-        <input type="range" id="freqSenoide" min="1" max="5000" value="2000" />
+        <input type="range" id="freqSenoide" min="1" max="5000" value="60" />
       </label>
       <span id="valSenoide">60</span> Hz
       <br />
       <label
         >Frequência da Triangular:
-        <input
-          type="range"
-          id="freqTriangular"
-          min="1"
-          max="5000"
-          value="5000"
-        />
+        <input type="range" id="freqTriangular" min="1" max="5000" value="60" />
       </label>
       <span id="valTriangular">60</span> Hz
       <br />
@@ -30,10 +39,15 @@
       </label>
       <span id="valPeriodos">2</span>
     </div>
-    <div id="plot" style="width: 100%; height: 500px"></div>
+    <div class="plots-vertical">
+      <div id="plot-senoide" class="plotbox"></div>
+      <div id="plot-triangular" class="plotbox"></div>
+      <div id="plot-pwm-pos" class="plotbox"></div>
+      <div id="plot-pwm-neg" class="plotbox"></div>
+    </div>
+    <div id="plot-tudo" class="plotbox"></div>
 
     <script>
-      const plotElement = document.getElementById("plot");
       const freqSenoideInput = document.getElementById("freqSenoide");
       const freqTriangularInput = document.getElementById("freqTriangular");
       const periodosInput = document.getElementById("periodos");
@@ -44,30 +58,31 @@
       function gerarDados(freqSenoide, freqTriangular, periodos) {
         const samples = 1000;
         const periodoSenoide = 1 / freqSenoide;
-        const duracao = periodos * periodoSenoide; // quantidade ajustável de períodos
+        const duracao = periodos * periodoSenoide;
         const t = [],
           senoide = [],
-          triangular = [],
-          pwm = [];
+          triangular = [];
+        const pwm = [],
+          pwm_positivo = [],
+          pwm_negativo = [];
 
         for (let i = 0; i < samples; i++) {
           let time = (i / (samples - 1)) * duracao;
           t.push(time);
 
-          // Onda senoide
           let sen = Math.sin(2 * Math.PI * freqSenoide * time);
-
-          // Onda triangular (normalizada de -1 a 1)
           let tri = 2 * Math.abs(2 * ((freqTriangular * time) % 1) - 1) - 1;
-
           senoide.push(sen);
           triangular.push(tri);
 
-          // PWM: 1 se senoide > triangular, senão 0
-          pwm.push(sen > tri ? 1 : 0);
+          let pwm_val = sen > tri ? 1 : 0;
+          pwm.push(pwm_val);
+
+          pwm_positivo.push(sen > 0 ? pwm_val : 0);
+          pwm_negativo.push(sen < 0 ? pwm_val : 0);
         }
 
-        return { t, senoide, triangular, pwm };
+        return { t, senoide, triangular, pwm, pwm_positivo, pwm_negativo };
       }
 
       function desenhar() {
@@ -79,23 +94,108 @@
         valTriangular.textContent = freqT;
         valPeriodos.textContent = periodos;
 
-        const { t, senoide, triangular, pwm } = gerarDados(
-          freqS,
-          freqT,
-          periodos
+        const { t, senoide, triangular, pwm, pwm_positivo, pwm_negativo } =
+          gerarDados(freqS, freqT, periodos);
+
+        // Senoide
+        Plotly.newPlot(
+          "plot-senoide",
+          [
+            {
+              x: t,
+              y: senoide,
+              name: "Senoide",
+              type: "scatter",
+            },
+          ],
+          {
+            title: "Onda Senoidal (Referência)",
+            xaxis: { title: "Tempo (s)" },
+            yaxis: { title: "Amplitude", range: [-1.2, 1.2] },
+            margin: { t: 36 },
+          }
         );
 
-        const data = [
-          { x: t, y: senoide, name: "Senoide", type: "scatter" },
-          { x: t, y: triangular, name: "Triangular", type: "scatter" },
-          { x: t, y: pwm, name: "PWM", type: "scatter", line: { shape: "hv" } },
-        ];
+        // Triangular
+        Plotly.newPlot(
+          "plot-triangular",
+          [
+            {
+              x: t,
+              y: triangular,
+              name: "Triangular",
+              type: "scatter",
+            },
+          ],
+          {
+            title: "Onda Triangular (Portadora)",
+            xaxis: { title: "Tempo (s)" },
+            yaxis: { title: "Amplitude", range: [-1.2, 1.2] },
+            margin: { t: 36 },
+          }
+        );
 
-        Plotly.newPlot(plotElement, data, {
-          title: "PWM Senoidal x Onda Triangular",
-          xaxis: { title: "Tempo (s)" },
-          yaxis: { title: "Amplitude", range: [-1.2, 1.2] },
-        });
+        // PWM para senoide positiva
+        Plotly.newPlot(
+          "plot-pwm-pos",
+          [
+            {
+              x: t,
+              y: pwm_positivo,
+              name: "PWM (senoide > 0)",
+              type: "scatter",
+              line: { shape: "hv" },
+            },
+          ],
+          {
+            title: "PWM (Semiciclo Positivo da Senoide)",
+            xaxis: { title: "Tempo (s)" },
+            yaxis: { title: "PWM", range: [-0.2, 1.2] },
+            margin: { t: 36 },
+          }
+        );
+
+        // PWM para senoide negativa
+        Plotly.newPlot(
+          "plot-pwm-neg",
+          [
+            {
+              x: t,
+              y: pwm_negativo,
+              name: "PWM (senoide < 0)",
+              type: "scatter",
+              line: { shape: "hv" },
+            },
+          ],
+          {
+            title: "PWM (Semiciclo Negativo da Senoide)",
+            xaxis: { title: "Tempo (s)" },
+            yaxis: { title: "PWM", range: [-0.2, 1.2] },
+            margin: { t: 36 },
+          }
+        );
+
+        // Gráfico final: tudo junto
+        Plotly.newPlot(
+          "plot-tudo",
+          [
+            { x: t, y: senoide, name: "Senoide", type: "scatter" },
+            { x: t, y: triangular, name: "Triangular", type: "scatter" },
+            {
+              x: t,
+              y: pwm,
+              name: "PWM",
+              type: "scatter",
+              line: { shape: "hv" },
+            },
+          ],
+          {
+            title: "Todas as Ondas Juntas",
+            xaxis: { title: "Tempo (s)" },
+            yaxis: { title: "Amplitude", range: [-1.2, 1.2] },
+            margin: { t: 36 },
+          }
+        );
       }
 
       freqSenoideInput.addEventListener("input", desenhar);
