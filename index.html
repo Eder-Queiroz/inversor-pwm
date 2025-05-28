@@ -75,11 +75,13 @@
           senoide.push(sen);
           triangular.push(tri);
 
-          let pwm_val = sen > tri ? 1 : 0;
-          pwm.push(pwm_val);
+          let pwm_val_pos = sen > 0 && sen > tri ? 1 : 0;
+          let pwm_val_neg = sen < 0 && sen < tri ? 1 : 0;
 
-          pwm_positivo.push(sen > 0 ? pwm_val : 0);
-          pwm_negativo.push(sen < 0 ? pwm_val : 0);
+          pwm.push(Math.abs(pwm_val_pos - pwm_val_neg));
+
+          pwm_positivo.push(sen > 0 ? pwm_val_pos : 0);
+          pwm_negativo.push(sen < 0 ? pwm_val_neg : 0);
         }
 
         return { t, senoide, triangular, pwm, pwm_positivo, pwm_negativo };
